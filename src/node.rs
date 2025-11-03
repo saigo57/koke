@@ -61,23 +61,15 @@ pub fn render_node(node: &NodeRef, document: &Document) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::Node;
     use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
     use regex::Regex;
+    use crate::node::Node;
+    use crate::test_helper::tests::{document, minify_html};
     
     wasm_bindgen_test_configure!(run_in_browser);
 
-    fn document() -> web_sys::Document {
-        web_sys::window().unwrap().document().unwrap()
-    }
-    
-    fn minify_html(input: &str) -> String {
-        let re = Regex::new(r"\s*\n\s*").unwrap(); // 改行の前後の空白を含めて除去
-        re.replace_all(input, "").into_owned()
-    }
-    
     #[wasm_bindgen_test]
-    fn render_node_sets_inner_html_for_text_nodes() {
+    fn render_node_tree_to_element() {
         let doc = document();
         let node_ref = 
             Node::new("div")

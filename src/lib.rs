@@ -1,10 +1,14 @@
-use web_sys::{Document, console};
-use crate::koke_obj::KokeObj;
+use web_sys::console;
+use crate::msg_proc::registr_msg_proc;
+use crate::node::NodeRef;
+use crate::event::Event;
 
 pub mod node;
-pub mod koke_obj;
+pub mod event;
+pub mod msg_proc;
+mod test_helper;
 
-pub fn init(root_id: &str) -> Option<KokeObj> {
+pub fn init(root_id: &str, ui_func: fn() -> NodeRef) -> Option<bool> {
     let window = match web_sys::window() {
         Some(win) => win,
         None => {
@@ -43,5 +47,9 @@ pub fn init(root_id: &str) -> Option<KokeObj> {
         }
     };
     
-    return Some(KokeObj::new(&root_elm));
+    registr_msg_proc(ui_func, &body, &document, &root_elm);
+    // 初回レンダリングをトリガー
+    Event::trigger_render_event(&body);
+
+    return Some(true);
 }

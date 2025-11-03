@@ -67,6 +67,8 @@ version = "0.1.0"
 dependencies = [
  "regex",
  "uuid",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
 ]
