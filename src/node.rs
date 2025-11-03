@@ -57,3 +57,58 @@ pub fn render_node(node: &NodeRef, document: &Document) -> Element {
     }
     elem
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node::Node;
+    use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
+    use regex::Regex;
+    
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    fn document() -> web_sys::Document {
+        web_sys::window().unwrap().document().unwrap()
+    }
+    
+    fn minify_html(input: &str) -> String {
+        let re = Regex::new(r"\s*\n\s*").unwrap(); // 改行の前後の空白を含めて除去
+        re.replace_all(input, "").into_owned()
+    }
+    
+    #[wasm_bindgen_test]
+    fn render_node_sets_inner_html_for_text_nodes() {
+        let doc = document();
+        let node_ref = 
+            Node::new("div")
+                .child(
+                    Node::new("ul")
+                        .child(
+                            Node::new("li")
+                                .text("item1")
+                                .into_ref()
+                        )
+                        .child(
+                            Node::new("li")
+                                .text("item2")
+                                .into_ref()
+                        )
+                        .into_ref()
+                )
+                .into_ref();
+
+        let rendered = render_node(&node_ref, &doc);
+
+        let expected_html = r#"
+            <div data-uuid=".*?">
+                <ul data-uuid=".*?">
+                    <li data-uuid=".*?">item1</li>
+                    <li data-uuid=".*?">item2</li>
+                </ul>
+            </div>
+        "#;
+        let minified = minify_html(expected_html);
+        let re = Regex::new(&minified).unwrap();
+        assert!(re.is_match(&rendered.outer_html()));
+    }
+}
