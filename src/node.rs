@@ -2,6 +2,9 @@ use uuid::Uuid;
 use std::rc::Rc;
 use std::cell::RefCell;
 use web_sys::{Document, Element};
+use crate::event::Event;
+
+pub const EVENT_CUSTOM_DATA_KEY: &str = "data-uuid";
 
 pub type NodeRef = Rc<RefCell<Node>>;
 pub struct Node {
@@ -10,7 +13,7 @@ pub struct Node {
     inner_html: Option<String>,
     value: Option<String>,
     on_click: Option<Box<dyn FnMut()>>,
-    bind: Option<Box<dyn FnMut(String)>>,
+    bind: Option<Box<dyn FnMut(Option<String>)>>,
     children: Vec<NodeRef>,
 }
 
@@ -37,6 +40,14 @@ impl Node {
         self
     }
     
+    pub fn on_click<F>(mut self, f: F) -> Self
+    where
+        F: 'static + FnMut(),
+    {
+        self.on_click = Some(Box::new(f));
+        self
+    }
+    
     pub fn into_ref(self) -> NodeRef {
         Rc::new(RefCell::new(self))
     }
@@ -45,7 +56,7 @@ impl Node {
 pub fn render_node(node: &NodeRef, document: &Document) -> Element {
     let node = node.borrow();
     let elem = document.create_element(&node.tag).unwrap();
-    elem.set_attribute("data-uuid", &node.event_key.to_string()).unwrap();
+    elem.set_attribute(EVENT_CUSTOM_DATA_KEY, &node.event_key.to_string()).unwrap();
     match &node.inner_html {
         Some(html) => elem.set_inner_html(html),
         None => {
@@ -56,6 +67,36 @@ pub fn render_node(node: &NodeRef, document: &Document) -> Element {
         }
     }
     elem
+}
+
+// レンダリングすべきときにtrueを返す
+pub fn dispatch_event(node: &NodeRef, uuid_str: &str, event: &Event) -> bool {
+    let mut node = node.borrow_mut();
+    if node.event_key.to_string() == uuid_str {
+        match event {
+            Event::Click => {
+                if let Some(on_click) = &mut node.on_click {
+                    on_click();
+                    return true;
+                }
+            },
+            Event::Change(value) => {
+                if let Some(bind) = &mut node.bind {
+                    bind(value.clone());
+                    // bindは再レンダリングをトリガーしないため、明示的にfalseを返す
+                    return false;
+                }
+            },
+            _ => {}
+        }
+    } else {
+        for child in &node.children {
+            if dispatch_event(child, uuid_str, event) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -102,5 +143,38 @@ mod tests {
         let minified = minify_html(expected_html);
         let re = Regex::new(&minified).unwrap();
         assert!(re.is_match(&rendered.outer_html()));
+    }
+    
+    #[wasm_bindgen_test]
+    fn dispatch_event_to_node() {
+        let node_ref = 
+            Node::new("div")
+                .child(
+                    Node::new("button")
+                        .on_click(|| {
+                            // do nothing
+                        })
+                        .into_ref()
+                )
+                .child(
+                    Node::new("button")
+                        .into_ref()
+                )
+                .into_ref();
+        
+        let button_node1 = node_ref.borrow().children[0].clone();
+        let button_node2 = node_ref.borrow().children[1].clone();
+        let button_uuid1 = button_node1.borrow().event_key.to_string();
+        let button_uuid2 = button_node2.borrow().event_key.to_string();
+        
+        let dispatched = dispatch_event(&node_ref, &button_uuid1, &Event::Click);
+        assert!(dispatched, "Event should be dispatched to button node");
+        
+        let dispatched = dispatch_event(&node_ref, &button_uuid2, &Event::Click);
+        assert!(!dispatched, "Event should not be dispatched to button node without handler");
+        
+        let fake_uuid = Uuid::new_v4().to_string();
+        let dispatched = dispatch_event(&node_ref, &fake_uuid, &Event::Click);
+        assert!(!dispatched, "Event should not be dispatched to any node");
     }
 }

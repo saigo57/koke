@@ -53,3 +53,7 @@ pub fn init(root_id: &str, ui_func: fn() -> NodeRef) -> Option<bool> {
 
     return Some(true);
 }
+
+pub fn log(msg: &str) {
+    console::log_1(&msg.into());
+}
