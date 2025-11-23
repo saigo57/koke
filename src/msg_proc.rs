@@ -8,9 +8,11 @@ use crate::node::{
     dispatch_event,
     EVENT_CUSTOM_DATA_KEY,
 };
+use crate::context::Context;
+use crate::UiFunction;
 
 pub fn registr_msg_proc(
-    ui_func: fn() -> NodeRef,
+    ui_func: UiFunction,
     body: &web_sys::HtmlElement,
     document: &web_sys::Document,
     root_elm: &web_sys::Element,
@@ -21,6 +23,8 @@ pub fn registr_msg_proc(
     let root_elm = root_elm.clone();
     let root_node: NodeRef = Node::new("div").into_ref(); // 一旦適当な初期値を入れておく
     
+    let ctx = Context::new(root_elm.clone());
+
     let msg_proc = move |e: web_sys::Event| {
         let event = Event::from_event(&e);
         log_event(&event);
@@ -37,7 +41,7 @@ pub fn registr_msg_proc(
             }
         }
         
-        let new_tree = ui_func();
+        let new_tree = ui_func(&ctx);
         // 次のmsg_procで参照できるように、root_nodeとnew_treeを差し替える
         std::mem::swap(&mut *root_node.borrow_mut(), &mut *new_tree.borrow_mut());
 
@@ -91,7 +95,7 @@ mod tests {
         root_elm.set_id("root");
         body.append_child(&root_elm).unwrap();
 
-        let ui_func = || {
+        let ui_func = |_: &Context| {
             Node::new("div")
                 .text("Hello, Koke!")
                 .into_ref()
@@ -121,7 +125,7 @@ mod tests {
         root_elm.set_id("root");
         body.append_child(&root_elm).unwrap();
 
-        let ui_func = || {
+        let ui_func = |_: &Context| {
             Node::new("div")
                 .child(
                     Node::new("button")

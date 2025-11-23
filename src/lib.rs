@@ -2,13 +2,18 @@ use web_sys::console;
 use crate::msg_proc::registr_msg_proc;
 use crate::node::NodeRef;
 use crate::event::Event;
+use crate::context::Context;
 
 pub mod node;
 pub mod event;
 pub mod msg_proc;
+pub mod state;
+pub mod context;
 mod test_helper;
 
-pub fn init(root_id: &str, ui_func: fn() -> NodeRef) -> Option<bool> {
+pub type UiFunction = fn(ctx: &Context) -> NodeRef;
+
+pub fn init(root_id: &str, ui_func: UiFunction) -> Option<bool> {
     let window = match web_sys::window() {
         Some(win) => win,
         None => {
