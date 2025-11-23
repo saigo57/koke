@@ -11,7 +11,6 @@ pub struct Node {
     event_key: Uuid,
     tag: String,
     inner_html: Option<String>,
-    value: Option<String>,
     on_click: Option<Box<dyn FnMut()>>,
     bind: Option<Box<dyn FnMut(Option<String>)>>,
     children: Vec<NodeRef>,
@@ -23,7 +22,6 @@ impl Node {
             event_key: Uuid::new_v4(),
             tag: tag.to_string(),
             inner_html: None,
-            value: None,
             on_click: None,
             bind: None,
             children: vec![],
@@ -47,7 +45,17 @@ impl Node {
         self.on_click = Some(Box::new(f));
         self
     }
-    
+
+    pub fn bind(mut self, ref_str: Rc<RefCell<String>>) -> Self {
+        let bind_closure = Box::new(move |new_value: Option<String>| {
+            if let Some(new_value) = new_value {
+                *ref_str.borrow_mut() = new_value;
+            }
+        });
+        self.bind = Some(bind_closure);
+        self
+    }
+
     pub fn into_ref(self) -> NodeRef {
         Rc::new(RefCell::new(self))
     }
@@ -176,5 +184,20 @@ mod tests {
         let fake_uuid = Uuid::new_v4().to_string();
         let dispatched = dispatch_event(&node_ref, &fake_uuid, &Event::Click);
         assert!(!dispatched, "Event should not be dispatched to any node");
+    }
+    
+    #[wasm_bindgen_test]
+    fn dispatch_change_event_updates_bound_value() {
+        let bound_value = Rc::new(RefCell::new(String::new()));
+        let node_ref = 
+            Node::new("input")
+                .bind(bound_value.clone())
+                .into_ref();
+
+        let input_uuid = node_ref.borrow().event_key.to_string();
+        let new_value = "New input value".to_string();
+        let dispatched = dispatch_event(&node_ref, &input_uuid, &Event::Change(Some(new_value.clone())));
+        assert!(!dispatched, "Change event should not trigger re-rendering");
+        assert_eq!(*bound_value.borrow(), new_value, "Bound value should be updated");
     }
 }
