@@ -6,17 +6,17 @@ use crate::event::Event;
 
 pub const EVENT_CUSTOM_DATA_KEY: &str = "data-uuid";
 
-pub type NodeRef = Rc<RefCell<Node>>;
-pub struct Node {
+pub type NodeRef<Msg> = Rc<RefCell<NodeBase<Msg>>>;
+pub struct NodeBase<Msg> {
     event_key: Uuid,
     tag: String,
     inner_html: Option<String>,
-    on_click: Option<String>,
+    on_click: Option<Msg>,
     bind: Option<Box<dyn FnMut(Option<String>)>>,
-    children: Vec<NodeRef>,
+    children: Vec<NodeRef<Msg>>,
 }
 
-impl Node {
+impl<Msg> NodeBase<Msg> {
     pub fn new(tag: &str) -> Self {
         Self {
             event_key: Uuid::new_v4(),
@@ -33,14 +33,14 @@ impl Node {
         self
     }
     
-    pub fn child(mut self, child: NodeRef) -> Self {
+    pub fn child(mut self, child: NodeRef<Msg>) -> Self {
         self.children.push(child);
         self
     }
     
-    pub fn on_click(mut self, message_id: &str) -> Self
+    pub fn on_click(mut self, message_id: Msg) -> Self
     {
-        self.on_click = Some(message_id.to_string());
+        self.on_click = Some(message_id);
         self
     }
 
@@ -54,12 +54,12 @@ impl Node {
         self
     }
 
-    pub fn into_ref(self) -> NodeRef {
+    pub fn into_ref(self) -> NodeRef<Msg> {
         Rc::new(RefCell::new(self))
     }
 }
 
-pub fn render_node(node: &NodeRef, document: &Document) -> Element {
+pub fn render_node<Msg>(node: &NodeRef<Msg>, document: &Document) -> Element {
     let node = node.borrow();
     let elem = document.create_element(&node.tag).unwrap();
     elem.set_attribute(EVENT_CUSTOM_DATA_KEY, &node.event_key.to_string()).unwrap();
@@ -75,13 +75,13 @@ pub fn render_node(node: &NodeRef, document: &Document) -> Element {
     elem
 }
 
-pub fn dispatch_event(node: &NodeRef, uuid_str: &str, event: &Event) -> Option<String> {
+pub fn dispatch_event<Msg>(node: &NodeRef<Msg>, uuid_str: &str, event: &Event) -> Option<Msg> {
     let mut node = node.borrow_mut();
     if node.event_key.to_string() == uuid_str {
         match event {
             Event::Click => {
-                if let Some(on_click) = &mut node.on_click {
-                    return on_click.clone().into();
+                if let Some(_) = &mut node.on_click {
+                    return node.on_click.take();
                 }
             },
             Event::Change(value) => {
@@ -108,10 +108,12 @@ mod tests {
     use super::*;
     use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
     use regex::Regex;
-    use crate::node::Node;
+    use crate::node::NodeBase;
     use crate::test_helper::tests::{document, minify_html};
     
     wasm_bindgen_test_configure!(run_in_browser);
+    
+    type Node = NodeBase<String>;
 
     #[wasm_bindgen_test]
     fn render_node_tree_to_element() {
@@ -155,7 +157,7 @@ mod tests {
             Node::new("div")
                 .child(
                     Node::new("button")
-                        .on_click("button_click")
+                        .on_click("button_click".to_string())
                         .into_ref()
                 )
                 .child(

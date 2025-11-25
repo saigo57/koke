@@ -3,7 +3,7 @@ use web_sys::console;
 use wasm_bindgen::prelude::*;
 use crate::event::Event;
 use crate::node::{
-    Node, 
+    NodeBase,
     NodeRef,
     render_node,
     dispatch_event,
@@ -11,24 +11,24 @@ use crate::node::{
 };
 use crate::context::Context;
 
-pub fn registr_msg_proc<T>(
-    ui_func: fn(ctx: &Context, model: &T) -> NodeRef,
+pub fn registr_msg_proc<Model, Msg>(
+    ui_func: fn(ctx: &Context, model: &Model) -> NodeRef<Msg>,
     body: &web_sys::HtmlElement,
     document: &web_sys::Document,
     root_elm: &web_sys::Element,
-    model: &T,
-    update: fn(String, &T) -> T
+    model: &Model,
+    update: fn(&Msg, &Model) -> Model
 )
-where T: Copy
+where Model: Copy
 {
     // cloneしたものをclosureにキャプチャして貰う必要がある
     let document = document.clone();
     let body = body.clone();
     let root_elm = root_elm.clone();
-    let root_node: NodeRef = Node::new("div").into_ref(); // 一旦適当な初期値を入れておく
+    let root_node: NodeRef<Msg> = NodeBase::<Msg>::new("div").into_ref(); // 一旦適当な初期値を入れておく
     
     let ctx = Context::new(root_elm.clone());
-    let model: RefCell<T> = RefCell::new(*model);
+    let model: RefCell<Model> = RefCell::new(*model);
 
     let msg_proc = move |e: web_sys::Event| {
         let event = Event::from_event(&e);
@@ -47,12 +47,12 @@ where T: Copy
             };
         
         if let Some(message_id) = message_id {
-            let m: T = *model.borrow();
-            let new_model = update(message_id, &m);
+            let m: Model = *model.borrow();
+            let new_model = update(&message_id, &m);
             *model.borrow_mut() = new_model;
         }
         
-        let m: T = *model.borrow();
+        let m: Model = *model.borrow();
         let new_tree = ui_func(&ctx, &m);
         // 次のmsg_procで参照できるように、root_nodeとnew_treeを差し替える
         std::mem::swap(&mut *root_node.borrow_mut(), &mut *new_tree.borrow_mut());
@@ -94,10 +94,12 @@ mod tests {
     use super::*;
     use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
     use regex::Regex;
-    use crate::node::Node;
+    use crate::node::NodeBase;
     use crate::test_helper::tests::{document, minify_html, wait_js_event};
     
     wasm_bindgen_test_configure!(run_in_browser);
+    
+    type Node = NodeBase<String>;
     
     #[wasm_bindgen_test]
     fn execute_rendering_if_event_triggered() {
@@ -149,7 +151,7 @@ mod tests {
                 .child(
                     Node::new("button")
                         .text("Click me2")
-                        .on_click("button_click")
+                        .on_click("button_click".to_string())
                         .into_ref()
                 )
                 .into_ref()

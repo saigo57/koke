@@ -11,14 +11,14 @@ pub mod state;
 pub mod context;
 mod test_helper;
 
-pub fn init<T>(
+pub fn init<Model, Msg>(
     root_id: &str,
-    ui_func: fn(ctx: &Context, model: &T) -> NodeRef,
-    model: &T,
-    update: fn(String, &T) -> T
+    ui_func: fn(ctx: &Context, model: &Model) -> NodeRef<Msg>,
+    model: &Model,
+    update: fn(&Msg, &Model) -> Model
 ) -> Option<bool>
 where
-    T: Copy,
+    Model: Copy,
 {
     let window = match web_sys::window() {
         Some(win) => win,
