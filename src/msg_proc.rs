@@ -19,7 +19,7 @@ pub fn registr_msg_proc<Model, Msg>(
     model: &Model,
     update: fn(&Msg, &Model) -> Model
 )
-where Model: Copy
+where Model: Clone + PartialEq
 {
     // cloneしたものをclosureにキャプチャして貰う必要がある
     let document = document.clone();
@@ -28,7 +28,7 @@ where Model: Copy
     let root_node: NodeRef<Msg> = NodeBase::<Msg>::new("div").into_ref(); // 一旦適当な初期値を入れておく
     
     let ctx = Context::new(root_elm.clone());
-    let model: RefCell<Model> = RefCell::new(*model);
+    let model: RefCell<Model> = RefCell::new(model.clone());
 
     let msg_proc = move |e: web_sys::Event| {
         let event = Event::from_event(&e);
@@ -39,7 +39,7 @@ where Model: Copy
             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
             .and_then(|el| el.get_attribute(EVENT_CUSTOM_DATA_KEY));
         let message_id =
-            if let (Some(uuid_str), Some(event)) = (uuid_str, event) {
+            if let (Some(uuid_str), Some(event)) = (uuid_str, event.clone()) {
                 // イベントをdispatchして、レンダリングが必要なかったら抜ける
                 dispatch_event(&root_node, &uuid_str, &event)
             } else {
@@ -47,12 +47,21 @@ where Model: Copy
             };
         
         if let Some(message_id) = message_id {
-            let m: Model = *model.borrow();
+            let m: Model = model.borrow().clone();
             let new_model = update(&message_id, &m);
+            if new_model == m {
+                // modelが変化しなかったらレンダリング不要
+                return;
+            }
             *model.borrow_mut() = new_model;
+        } else {
+            match event {
+                Some(Event::RustRender) => (), // RustRenderイベントならレンダリング実行
+                _ => return, // その他のイベントなら何もしない
+            }
         }
         
-        let m: Model = *model.borrow();
+        let m: Model = model.borrow().clone();
         let new_tree = ui_func(&ctx, &m);
         // 次のmsg_procで参照できるように、root_nodeとnew_treeを差し替える
         std::mem::swap(&mut *root_node.borrow_mut(), &mut *new_tree.borrow_mut());

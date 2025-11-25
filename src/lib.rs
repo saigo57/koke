@@ -18,7 +18,7 @@ pub fn init<Model, Msg>(
     update: fn(&Msg, &Model) -> Model
 ) -> Option<bool>
 where
-    Model: Copy,
+    Model: Clone + PartialEq,
 {
     let window = match web_sys::window() {
         Some(win) => win,

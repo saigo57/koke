@@ -12,7 +12,7 @@ pub struct NodeBase<Msg> {
     tag: String,
     inner_html: Option<String>,
     on_click: Option<Msg>,
-    bind: Option<Box<dyn FnMut(Option<String>)>>,
+    on_change: Option<fn (String) -> Msg>,
     children: Vec<NodeRef<Msg>>,
 }
 
@@ -23,7 +23,7 @@ impl<Msg> NodeBase<Msg> {
             tag: tag.to_string(),
             inner_html: None,
             on_click: None,
-            bind: None,
+            on_change: None,
             children: vec![],
         }
     }
@@ -43,14 +43,9 @@ impl<Msg> NodeBase<Msg> {
         self.on_click = Some(message_id);
         self
     }
-
-    pub fn bind(mut self, ref_str: Rc<RefCell<String>>) -> Self {
-        let bind_closure = Box::new(move |new_value: Option<String>| {
-            if let Some(new_value) = new_value {
-                *ref_str.borrow_mut() = new_value;
-            }
-        });
-        self.bind = Some(bind_closure);
+    
+    pub fn on_change(mut self, callback: fn (String) -> Msg) -> Self {
+        self.on_change = Some(callback);
         self
     }
 
@@ -85,10 +80,11 @@ pub fn dispatch_event<Msg>(node: &NodeRef<Msg>, uuid_str: &str, event: &Event) -
                 }
             },
             Event::Change(value) => {
-                if let Some(bind) = &mut node.bind {
-                    bind(value.clone());
-                    // bindは再レンダリングをトリガーしないため、明示的にNoneを返す
-                    return None;
+                if let Some(callback) = &node.on_change {
+                    if let Some(v) = value {
+                        let msg = callback(v.clone());
+                        return Some(msg);
+                    }
                 }
             },
             _ => {}
@@ -187,7 +183,6 @@ mod tests {
         let bound_value = Rc::new(RefCell::new(String::new()));
         let node_ref = 
             Node::new("input")
-                .bind(bound_value.clone())
                 .into_ref();
 
         let input_uuid = node_ref.borrow().event_key.to_string();
