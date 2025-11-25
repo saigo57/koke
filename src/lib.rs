@@ -11,9 +11,15 @@ pub mod state;
 pub mod context;
 mod test_helper;
 
-pub type UiFunction = fn(ctx: &Context) -> NodeRef;
-
-pub fn init(root_id: &str, ui_func: UiFunction) -> Option<bool> {
+pub fn init<T>(
+    root_id: &str,
+    ui_func: fn(ctx: &Context, model: &T) -> NodeRef,
+    model: &T,
+    update: fn(String, &T) -> T
+) -> Option<bool>
+where
+    T: Copy,
+{
     let window = match web_sys::window() {
         Some(win) => win,
         None => {
@@ -52,7 +58,7 @@ pub fn init(root_id: &str, ui_func: UiFunction) -> Option<bool> {
         }
     };
     
-    registr_msg_proc(ui_func, &body, &document, &root_elm);
+    registr_msg_proc(ui_func, &body, &document, &root_elm, model, update);
     // 初回レンダリングをトリガー
     Event::trigger_render_event(&body);
 

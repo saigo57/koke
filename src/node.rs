@@ -11,7 +11,7 @@ pub struct Node {
     event_key: Uuid,
     tag: String,
     inner_html: Option<String>,
-    on_click: Option<Box<dyn FnMut()>>,
+    on_click: Option<String>,
     bind: Option<Box<dyn FnMut(Option<String>)>>,
     children: Vec<NodeRef>,
 }
@@ -38,11 +38,9 @@ impl Node {
         self
     }
     
-    pub fn on_click<F>(mut self, f: F) -> Self
-    where
-        F: 'static + FnMut(),
+    pub fn on_click(mut self, message_id: &str) -> Self
     {
-        self.on_click = Some(Box::new(f));
+        self.on_click = Some(message_id.to_string());
         self
     }
 
@@ -77,34 +75,32 @@ pub fn render_node(node: &NodeRef, document: &Document) -> Element {
     elem
 }
 
-// レンダリングすべきときにtrueを返す
-pub fn dispatch_event(node: &NodeRef, uuid_str: &str, event: &Event) -> bool {
+pub fn dispatch_event(node: &NodeRef, uuid_str: &str, event: &Event) -> Option<String> {
     let mut node = node.borrow_mut();
     if node.event_key.to_string() == uuid_str {
         match event {
             Event::Click => {
                 if let Some(on_click) = &mut node.on_click {
-                    on_click();
-                    return true;
+                    return on_click.clone().into();
                 }
             },
             Event::Change(value) => {
                 if let Some(bind) = &mut node.bind {
                     bind(value.clone());
-                    // bindは再レンダリングをトリガーしないため、明示的にfalseを返す
-                    return false;
+                    // bindは再レンダリングをトリガーしないため、明示的にNoneを返す
+                    return None;
                 }
             },
             _ => {}
         }
     } else {
         for child in &node.children {
-            if dispatch_event(child, uuid_str, event) {
-                return true;
+            if let Some(result) = dispatch_event(child, uuid_str, event) {
+                return Some(result);
             }
         }
     }
-    false
+    None
 }
 
 #[cfg(test)]
@@ -159,9 +155,7 @@ mod tests {
             Node::new("div")
                 .child(
                     Node::new("button")
-                        .on_click(|| {
-                            // do nothing
-                        })
+                        .on_click("button_click")
                         .into_ref()
                 )
                 .child(
@@ -176,14 +170,14 @@ mod tests {
         let button_uuid2 = button_node2.borrow().event_key.to_string();
         
         let dispatched = dispatch_event(&node_ref, &button_uuid1, &Event::Click);
-        assert!(dispatched, "Event should be dispatched to button node");
+        assert_eq!(dispatched, Some("button_click".to_string()), "Event should be dispatched to button node");
         
         let dispatched = dispatch_event(&node_ref, &button_uuid2, &Event::Click);
-        assert!(!dispatched, "Event should not be dispatched to button node without handler");
+        assert!(dispatched.is_none(), "Event should not be dispatched to button node without handler");
         
         let fake_uuid = Uuid::new_v4().to_string();
         let dispatched = dispatch_event(&node_ref, &fake_uuid, &Event::Click);
-        assert!(!dispatched, "Event should not be dispatched to any node");
+        assert!(dispatched.is_none(), "Event should not be dispatched to any node");
     }
     
     #[wasm_bindgen_test]
@@ -197,7 +191,7 @@ mod tests {
         let input_uuid = node_ref.borrow().event_key.to_string();
         let new_value = "New input value".to_string();
         let dispatched = dispatch_event(&node_ref, &input_uuid, &Event::Change(Some(new_value.clone())));
-        assert!(!dispatched, "Change event should not trigger re-rendering");
+        assert!(dispatched.is_none(), "Change event should not trigger re-rendering");
         assert_eq!(*bound_value.borrow(), new_value, "Bound value should be updated");
     }
 }

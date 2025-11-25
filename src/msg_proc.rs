@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use web_sys::console;
 use wasm_bindgen::prelude::*;
 use crate::event::Event;
@@ -9,14 +10,17 @@ use crate::node::{
     EVENT_CUSTOM_DATA_KEY,
 };
 use crate::context::Context;
-use crate::UiFunction;
 
-pub fn registr_msg_proc(
-    ui_func: UiFunction,
+pub fn registr_msg_proc<T>(
+    ui_func: fn(ctx: &Context, model: &T) -> NodeRef,
     body: &web_sys::HtmlElement,
     document: &web_sys::Document,
     root_elm: &web_sys::Element,
-) {
+    model: &T,
+    update: fn(String, &T) -> T
+)
+where T: Copy
+{
     // cloneしたものをclosureにキャプチャして貰う必要がある
     let document = document.clone();
     let body = body.clone();
@@ -24,6 +28,7 @@ pub fn registr_msg_proc(
     let root_node: NodeRef = Node::new("div").into_ref(); // 一旦適当な初期値を入れておく
     
     let ctx = Context::new(root_elm.clone());
+    let model: RefCell<T> = RefCell::new(*model);
 
     let msg_proc = move |e: web_sys::Event| {
         let event = Event::from_event(&e);
@@ -33,15 +38,22 @@ pub fn registr_msg_proc(
             .target()
             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
             .and_then(|el| el.get_attribute(EVENT_CUSTOM_DATA_KEY));
-        if let (Some(uuid_str), Some(event)) = (uuid_str, event) {
-            // イベントをdispatchして、レンダリングが必要なかったら抜ける
-            let is_render = dispatch_event(&root_node, &uuid_str, &event);
-            if !is_render {
-                return;
-            }
+        let message_id =
+            if let (Some(uuid_str), Some(event)) = (uuid_str, event) {
+                // イベントをdispatchして、レンダリングが必要なかったら抜ける
+                dispatch_event(&root_node, &uuid_str, &event)
+            } else {
+                None
+            };
+        
+        if let Some(message_id) = message_id {
+            let m: T = *model.borrow();
+            let new_model = update(message_id, &m);
+            *model.borrow_mut() = new_model;
         }
         
-        let new_tree = ui_func(&ctx);
+        let m: T = *model.borrow();
+        let new_tree = ui_func(&ctx, &m);
         // 次のmsg_procで参照できるように、root_nodeとnew_treeを差し替える
         std::mem::swap(&mut *root_node.borrow_mut(), &mut *new_tree.borrow_mut());
 
@@ -95,12 +107,13 @@ mod tests {
         root_elm.set_id("root");
         body.append_child(&root_elm).unwrap();
 
-        let ui_func = |_: &Context| {
+        let ui_func = |_: &Context, model: &i32| {
             Node::new("div")
                 .text("Hello, Koke!")
                 .into_ref()
         };
-        registr_msg_proc(ui_func, &body, &document, &root_elm);
+        let model = 0;
+        registr_msg_proc(ui_func, &body, &document, &root_elm, &model, |_, m| *m);
         
         // まず、root_elmの中身は空であることを確認
         assert_eq!(root_elm.inner_html(), "");
@@ -125,7 +138,7 @@ mod tests {
         root_elm.set_id("root");
         body.append_child(&root_elm).unwrap();
 
-        let ui_func = |_: &Context| {
+        let ui_func = |_: &Context, model: &i32| {
             Node::new("div")
                 .child(
                     Node::new("button")
@@ -136,14 +149,13 @@ mod tests {
                 .child(
                     Node::new("button")
                         .text("Click me2")
-                        .on_click(|| {
-                            // イベントハンドラあり
-                        })
+                        .on_click("button_click")
                         .into_ref()
                 )
                 .into_ref()
         };
-        registr_msg_proc(ui_func, &body, &document, &root_elm);
+        let model = 0;
+        registr_msg_proc(ui_func, &body, &document, &root_elm, &model, |_, m| *m);
         
         // Eventをトリガーしてレンダリングを実行
         Event::trigger_render_event(&body);
