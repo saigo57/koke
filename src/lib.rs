@@ -2,18 +2,15 @@ use web_sys::console;
 use crate::msg_proc::registr_msg_proc;
 use crate::node::NodeRef;
 use crate::event::Event;
-use crate::context::Context;
 
 pub mod node;
 pub mod event;
 pub mod msg_proc;
-pub mod state;
-pub mod context;
 mod test_helper;
 
 pub fn init<Model, Msg>(
     root_id: &str,
-    ui_func: fn(ctx: &Context, model: &Model) -> NodeRef<Msg>,
+    ui_func: fn(model: &Model) -> NodeRef<Msg>,
     model: &Model,
     update: fn(&Msg, &Model) -> Model
 ) -> Option<bool>
