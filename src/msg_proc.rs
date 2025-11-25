@@ -6,17 +6,17 @@ use crate::node::{
     NodeBase,
     NodeRef,
     render_node,
-    dispatch_event,
+    event_to_message,
     EVENT_CUSTOM_DATA_KEY,
 };
 
 pub fn registr_msg_proc<Model, Msg>(
-    ui_func: fn(model: &Model) -> NodeRef<Msg>,
     body: &web_sys::HtmlElement,
     document: &web_sys::Document,
     root_elm: &web_sys::Element,
     model: &Model,
-    update: fn(&Msg, &Model) -> Model
+    update: fn(&Msg, &Model) -> Model,
+    ui_func: fn(model: &Model) -> NodeRef<Msg>,
 )
 where Model: Clone + PartialEq
 {
@@ -38,7 +38,7 @@ where Model: Clone + PartialEq
         let message_id =
             if let (Some(uuid_str), Some(event)) = (uuid_str, event.clone()) {
                 // イベントをdispatchして、レンダリングが必要なかったら抜ける
-                dispatch_event(&root_node, &uuid_str, &event)
+                event_to_message(&root_node, &uuid_str, &event)
             } else {
                 None
             };
@@ -121,7 +121,7 @@ mod tests {
                 .into_ref()
         };
         let model = 0;
-        registr_msg_proc(ui_func, &body, &document, &root_elm, &model, |_, m| *m);
+        registr_msg_proc(&body, &document, &root_elm, &model, |_, m| *m, ui_func);
         
         // まず、root_elmの中身は空であることを確認
         assert_eq!(root_elm.inner_html(), "");
@@ -162,8 +162,14 @@ mod tests {
                 )
                 .into_ref()
         };
+        let update = |msg: &String, model: &i32| {
+            match msg.as_str() {
+                "button_click" => model + 1,
+                _ => *model,
+            }
+        };
         let model = 0;
-        registr_msg_proc(ui_func, &body, &document, &root_elm, &model, |_, m| *m);
+        registr_msg_proc(&body, &document, &root_elm, &model, update, ui_func);
         
         // Eventをトリガーしてレンダリングを実行
         Event::trigger_render_event(&body);
@@ -181,7 +187,7 @@ mod tests {
         let prev_inner_html = root_elm.inner_html();
         assert!(re.is_match(&prev_inner_html));
         
-        // イベントハンドラが無いときは再レンダリングされない
+        // イベントハンドラがないときは再レンダリングされない
         let prev_inner_html = root_elm.inner_html();
         let button1 = root_elm.first_element_child().unwrap().first_element_child().unwrap();
         assert_eq!(button1.inner_html(), "Click me1");

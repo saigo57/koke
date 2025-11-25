@@ -70,7 +70,7 @@ pub fn render_node<Msg>(node: &NodeRef<Msg>, document: &Document) -> Element {
     elem
 }
 
-pub fn dispatch_event<Msg>(node: &NodeRef<Msg>, uuid_str: &str, event: &Event) -> Option<Msg> {
+pub fn event_to_message<Msg>(node: &NodeRef<Msg>, uuid_str: &str, event: &Event) -> Option<Msg> {
     let mut node = node.borrow_mut();
     if node.event_key.to_string() == uuid_str {
         match event {
@@ -91,7 +91,7 @@ pub fn dispatch_event<Msg>(node: &NodeRef<Msg>, uuid_str: &str, event: &Event) -
         }
     } else {
         for child in &node.children {
-            if let Some(result) = dispatch_event(child, uuid_str, event) {
+            if let Some(result) = event_to_message(child, uuid_str, event) {
                 return Some(result);
             }
         }
@@ -167,28 +167,14 @@ mod tests {
         let button_uuid1 = button_node1.borrow().event_key.to_string();
         let button_uuid2 = button_node2.borrow().event_key.to_string();
         
-        let dispatched = dispatch_event(&node_ref, &button_uuid1, &Event::Click);
-        assert_eq!(dispatched, Some("button_click".to_string()), "Event should be dispatched to button node");
+        let msg = event_to_message(&node_ref, &button_uuid1, &Event::Click);
+        assert_eq!(msg, Some("button_click".to_string()), "Event should be dispatched to button node");
         
-        let dispatched = dispatch_event(&node_ref, &button_uuid2, &Event::Click);
-        assert!(dispatched.is_none(), "Event should not be dispatched to button node without handler");
+        let msg = event_to_message(&node_ref, &button_uuid2, &Event::Click);
+        assert!(msg.is_none(), "Event should not be dispatched to button node without handler");
         
         let fake_uuid = Uuid::new_v4().to_string();
-        let dispatched = dispatch_event(&node_ref, &fake_uuid, &Event::Click);
-        assert!(dispatched.is_none(), "Event should not be dispatched to any node");
-    }
-    
-    #[wasm_bindgen_test]
-    fn dispatch_change_event_updates_bound_value() {
-        let bound_value = Rc::new(RefCell::new(String::new()));
-        let node_ref = 
-            Node::new("input")
-                .into_ref();
-
-        let input_uuid = node_ref.borrow().event_key.to_string();
-        let new_value = "New input value".to_string();
-        let dispatched = dispatch_event(&node_ref, &input_uuid, &Event::Change(Some(new_value.clone())));
-        assert!(dispatched.is_none(), "Change event should not trigger re-rendering");
-        assert_eq!(*bound_value.borrow(), new_value, "Bound value should be updated");
+        let msg = event_to_message(&node_ref, &fake_uuid, &Event::Click);
+        assert!(msg.is_none(), "Event should not be dispatched to any node");
     }
 }

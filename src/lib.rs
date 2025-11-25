@@ -10,9 +10,9 @@ mod test_helper;
 
 pub fn init<Model, Msg>(
     root_id: &str,
-    ui_func: fn(model: &Model) -> NodeRef<Msg>,
     model: &Model,
-    update: fn(&Msg, &Model) -> Model
+    update: fn(&Msg, &Model) -> Model,
+    ui_func: fn(model: &Model) -> NodeRef<Msg>,
 ) -> Option<bool>
 where
     Model: Clone + PartialEq,
@@ -55,7 +55,7 @@ where
         }
     };
     
-    registr_msg_proc(ui_func, &body, &document, &root_elm, model, update);
+    registr_msg_proc(&body, &document, &root_elm, model, update, ui_func);
     // 初回レンダリングをトリガー
     Event::trigger_render_event(&body);
 
